@@ -20,6 +20,11 @@
                         <f:radioBlock name="versioning" value="GLOBAL" title="One version for all modules"
                                       checked="${'GLOBAL' == it.defaultVersioning}"
                                       help="/plugin/artifactory/help/release/ReleaseAction/help-versioningGlobal.html">
+ 							<f:entry field="allowSnapshotInReleaseVersion" title=""
+                                     help="/plugin/artifactory/help/release/ReleaseAction/help-allowSnapshotInReleaseVersion.html">
+                                 <f:checkbox name="allowSnapshotInReleaseVersion" default="false" checked="${it.allowSnapshotInReleaseVersion}"/>
+                                <label class="attach-previous">${%Allow SNAPSHOT in 'Release version' naming}</label>
+                            </f:entry>                                      
                             <f:entry field="releaseVersion" title="Release version"
                                      help="/plugin/artifactory/help/release/ReleaseAction/help-releaseVersion.html">
                                 <f:textbox name="releaseVersion" value="${it.defaultGlobalReleaseVersion}"/>

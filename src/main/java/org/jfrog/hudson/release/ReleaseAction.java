@@ -16,12 +16,16 @@
 
 package org.jfrog.hudson.release;
 
-import com.google.common.collect.Maps;
-import hudson.Util;
-import hudson.matrix.MatrixConfiguration;
-import hudson.matrix.MatrixProject;
-import hudson.model.*;
-import hudson.tasks.BuildWrapper;
+import java.io.IOException;
+import java.util.Collection;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import javax.servlet.ServletException;
+
 import org.apache.commons.lang.StringUtils;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.map.SerializationConfig;
@@ -36,13 +40,17 @@ import org.jfrog.hudson.util.ErrorResponse;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
 
-import javax.servlet.ServletException;
-import java.io.IOException;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import com.google.common.collect.Maps;
+
+import hudson.Util;
+import hudson.matrix.MatrixConfiguration;
+import hudson.matrix.MatrixProject;
+import hudson.model.AbstractProject;
+import hudson.model.Action;
+import hudson.model.BuildableItem;
+import hudson.model.Cause;
+import hudson.model.FreeStyleProject;
+import hudson.tasks.BuildWrapper;
 
 /**
  * This action leads to execution of the release wrapper. It will collect information from the user about the release
@@ -61,11 +69,19 @@ public abstract class ReleaseAction<P extends AbstractProject & BuildableItem,
      * The next release version to change the model to if using one global version.
      */
     protected String releaseVersion;
-    /**
-     * Next (development) version to change the model to if using one global version.
-     */
-    protected String nextVersion;
-    protected transient boolean strategyRequestFailed = false;
+
+	/**
+	 * Next (development) version to change the model to if using one global version.
+	 */
+	protected String nextVersion;
+
+	/**
+	 * Customized field
+	 */
+	protected Boolean allowSnapshotInReleaseVersion;
+
+
+	protected transient boolean strategyRequestFailed = false;
     protected transient String strategyRequestErrorMessage = null;
     protected transient boolean strategyPluginExists;
     protected transient Map stagingStrategy;
@@ -131,6 +147,7 @@ public abstract class ReleaseAction<P extends AbstractProject & BuildableItem,
         defaultModules = null;
         defaultVcsConfig = null;
         defaultPromotionConfig = null;
+		allowSnapshotInReleaseVersion = null;
     }
 
     public boolean isStrategyRequestFailed() {
@@ -174,7 +191,15 @@ public abstract class ReleaseAction<P extends AbstractProject & BuildableItem,
 
     public String getNextVersion() {
         return nextVersion;
-    }
+	}
+
+	public boolean isAllowSnapshotInReleaseVersion() {
+		return allowSnapshotInReleaseVersion;
+	}
+
+	public void setAllowSnapshotInReleaseVersion(boolean allowSnapshotInReleaseVersion) {
+		this.allowSnapshotInReleaseVersion = allowSnapshotInReleaseVersion;
+	}
 
     public boolean isCreateVcsTag() {
         return createVcsTag;
@@ -336,6 +361,13 @@ public abstract class ReleaseAction<P extends AbstractProject & BuildableItem,
     private void readRequestParams(StaplerRequest req, boolean api) {
         req.bindParameters(this);
 
+//		Enumeration parameterNames = req.getParameterNames();
+//		while (parameterNames.hasMoreElements()) {
+//			String para = (String) parameterNames.nextElement();
+//			String parameter = req.getParameter(para);
+//			System.out.println("ParameterName:" + para + "  Parameter:" + parameter);
+//		}
+
         String versioningStr = req.getParameter("versioning");
         versioning = VERSIONING.valueOf(versioningStr);
         switch (versioning) {
@@ -345,6 +377,11 @@ public abstract class ReleaseAction<P extends AbstractProject & BuildableItem,
             case PER_MODULE:
                 doPerModuleVersioning(req);
         }
+
+		if (req.getParameter("allowSnapshotInReleaseVersion") != null) {
+			String allowSnapshotInReleaseVersionStr = req.getParameter("allowSnapshotInReleaseVersion");
+			allowSnapshotInReleaseVersion = Boolean.getBoolean(allowSnapshotInReleaseVersionStr);
+		}
 
         createVcsTag = req.getParameter("createVcsTag") != null;
         if (createVcsTag) {

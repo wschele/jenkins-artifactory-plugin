@@ -16,14 +16,16 @@
 
 package org.jfrog.hudson.release.maven;
 
-import com.google.common.collect.Maps;
-import hudson.FilePath;
-import hudson.maven.ModuleName;
-import hudson.remoting.VirtualChannel;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.Map;
+
+import com.google.common.collect.Maps;
+
+import hudson.FilePath;
+import hudson.maven.ModuleName;
+import hudson.model.BuildListener;
+import hudson.remoting.VirtualChannel;
 
 /**
  * Rewrites the project versions in the pom.
@@ -37,6 +39,8 @@ public class PomTransformer implements FilePath.FileCallable<Boolean> {
     private final Map<ModuleName, String> versionsByModule;
     private final boolean failOnSnapshot;
 
+	private final BuildListener buildListener;
+
     /**
      * Transforms single pom file.
      *
@@ -45,13 +49,36 @@ public class PomTransformer implements FilePath.FileCallable<Boolean> {
      * @param scmUrl           Scm url to use if scm element exists in the pom file
      * @param failOnSnapshot   If true, fail with IllegalStateException if the pom contains snapshot version after the version changes
      */
-    public PomTransformer(ModuleName currentModule, Map<ModuleName, String> versionsByModule, String scmUrl,
+	public PomTransformer(ModuleName currentModule, Map<ModuleName, String> versionsByModule, String scmUrl, boolean failOnSnapshot) {
+		this.currentModule = currentModule;
+		this.versionsByModule = versionsByModule;
+		this.scmUrl = scmUrl;
+		this.failOnSnapshot = failOnSnapshot;
+		this.buildListener = null;
+	}
+
+    /**
+     * Transforms single pom file.
+     *
+     * @param currentModule    The current module we work on
+     * @param versionsByModule Map of module names to module version
+     * @param scmUrl           Scm url to use if scm element exists in the pom file
+     * @param failOnSnapshot   If true, fail with IllegalStateException if the pom contains snapshot version after the version changes
+     */
+	public PomTransformer(BuildListener listener, ModuleName currentModule, Map<ModuleName, String> versionsByModule, String scmUrl,
             boolean failOnSnapshot) {
         this.currentModule = currentModule;
         this.versionsByModule = versionsByModule;
         this.scmUrl = scmUrl;
         this.failOnSnapshot = failOnSnapshot;
+		this.buildListener = listener;
     }
+
+	private void log(String message) {
+		if (buildListener != null) {
+			buildListener.getLogger().println("[RELEASE.POM_TRANSFORMER] " + message);
+		}
+	}
 
     /**
      * Performs the transformation.

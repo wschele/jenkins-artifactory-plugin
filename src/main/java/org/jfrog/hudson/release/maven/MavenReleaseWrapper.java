@@ -16,19 +16,13 @@
 
 package org.jfrog.hudson.release.maven;
 
-import com.google.common.collect.Maps;
-import hudson.Extension;
-import hudson.FilePath;
-import hudson.Launcher;
-import hudson.maven.MavenModule;
-import hudson.maven.MavenModuleSet;
-import hudson.maven.MavenModuleSetBuild;
-import hudson.maven.ModuleName;
-import hudson.model.*;
-import hudson.model.listeners.RunListener;
-import hudson.tasks.BuildWrapper;
-import hudson.tasks.BuildWrapperDescriptor;
-import hudson.util.ListBoxModel;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import org.apache.commons.lang.StringUtils;
 import org.jfrog.build.extractor.maven.transformer.SnapshotNotAllowedException;
 import org.jfrog.hudson.ArtifactoryRedeployPublisher;
@@ -40,12 +34,25 @@ import org.jfrog.hudson.release.scm.AbstractScmCoordinator;
 import org.jfrog.hudson.release.scm.ScmCoordinator;
 import org.kohsuke.stapler.DataBoundConstructor;
 
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import com.google.common.collect.Maps;
+
+import hudson.Extension;
+import hudson.FilePath;
+import hudson.Launcher;
+import hudson.maven.MavenModule;
+import hudson.maven.MavenModuleSet;
+import hudson.maven.MavenModuleSetBuild;
+import hudson.maven.ModuleName;
+import hudson.model.AbstractBuild;
+import hudson.model.AbstractProject;
+import hudson.model.Action;
+import hudson.model.BuildListener;
+import hudson.model.Result;
+import hudson.model.TaskListener;
+import hudson.model.listeners.RunListener;
+import hudson.tasks.BuildWrapper;
+import hudson.tasks.BuildWrapperDescriptor;
+import hudson.util.ListBoxModel;
 
 /**
  * A release wrapper for maven projects. Allows performing release steps on maven
@@ -130,7 +137,14 @@ public class MavenReleaseWrapper extends BuildWrapper {
             };
         }
 
+		log(listener, "" + releaseAction.toString() + "");
+		log(listener, "#######################################");
+		log(listener, "        CUSTOMIZED VERSION        ");
+		log(listener, "#######################################");
+		log(listener, "");
+
         log(listener, "Release build triggered");
+		log(listener, "Paremeter AllowSnapshotInReleaseVersion = " + (!releaseAction.isAllowSnapshotInReleaseVersion()));
 
         final MavenModuleSetBuild mavenBuild = (MavenModuleSetBuild) build;
         scmCoordinator = AbstractScmCoordinator.createScmCoordinator(build, listener, releaseAction);
@@ -143,7 +157,8 @@ public class MavenReleaseWrapper extends BuildWrapper {
             boolean modified;
             try {
                 log(listener, "Changing POMs to release version");
-                modified = changeVersions(mavenBuild, releaseAction, true, vcsUrl);
+
+				modified = changeVersions(listener, mavenBuild, releaseAction, true, false, vcsUrl);
             } catch (SnapshotNotAllowedException e) {
                 log(listener, "ERROR: " + e.getMessage());
                 // abort the build
@@ -183,7 +198,7 @@ public class MavenReleaseWrapper extends BuildWrapper {
                                 AbstractScmCoordinator.isSvn(build.getProject())
                                 ? scmCoordinator.getRemoteUrlForPom() : null;
                         log(listener, "Changing POMs to next development version");
-                        boolean modified = changeVersions(mavenBuild, releaseAction, false, scmUrl);
+						boolean modified = changeVersions(listener, mavenBuild, releaseAction, false, false, scmUrl);
                         scmCoordinator.afterDevelopmentVersionChange(modified);
                     }
                 } catch (Exception e) {
@@ -196,7 +211,7 @@ public class MavenReleaseWrapper extends BuildWrapper {
         };
     }
 
-    private boolean changeVersions(MavenModuleSetBuild mavenBuild, ReleaseAction release, boolean releaseVersion,
+	private boolean changeVersions(BuildListener listener, MavenModuleSetBuild mavenBuild, ReleaseAction release, boolean releaseVersion, boolean allowSnapshotInRelease,
                                    String scmUrl) throws IOException, InterruptedException {
         FilePath moduleRoot = mavenBuild.getModuleRoot();
         // get the active modules only
@@ -207,6 +222,7 @@ public class MavenReleaseWrapper extends BuildWrapper {
             String version = releaseVersion ? release.getReleaseVersionFor(module.getModuleName()) :
                     release.getNextVersionFor(module.getModuleName());
             modulesByName.put(module.getModuleName(), version);
+			listener.getLogger().println("[CHANGE_VERSIONS] moduleName=" + module.getModuleName() + " releaseVersion=" + releaseVersion + " version=" + version);
         }
 
         boolean modified = false;
@@ -217,7 +233,7 @@ public class MavenReleaseWrapper extends BuildWrapper {
             debuggingLogger.fine("Changing version of pom: " + pomPath);
             scmCoordinator.edit(pomPath);
             modified |= pomPath.act(
-                    new PomTransformer(mavenModule.getModuleName(), modulesByName, scmUrl, releaseVersion));
+new PomTransformer(listener, mavenModule.getModuleName(), modulesByName, scmUrl, allowSnapshotInRelease));
         }
         return modified;
     }
